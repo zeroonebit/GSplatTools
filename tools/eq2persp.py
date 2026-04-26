@@ -267,6 +267,7 @@ def build_ffmpeg_cmd(
     preset: str,
     pix_fmt: str,
     overwrite: bool,
+    gpu: bool = False,
     ss: str | None = None,
     to: str | None = None,
     duration: str | None = None,
@@ -288,6 +289,10 @@ def build_ffmpeg_cmd(
     if overwrite:
         cmd += ["-y"]
 
+    if gpu:
+        # Upload decoded frames to GPU for NVENC — v360 filter still runs on CPU
+        cmd += ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+
     if ss:
         cmd += ["-ss", ss]
 
@@ -298,15 +303,27 @@ def build_ffmpeg_cmd(
     elif to:
         cmd += ["-to", to]
 
-    cmd += [
-        "-vf", v360_filter,
-        "-c:v", "libx265",
-        "-crf", str(crf),
-        "-preset", preset,
-        "-pix_fmt", pix_fmt,
-        "-c:a", "copy",
-        output_path,
-    ]
+    if gpu:
+        # NVENC path: download back from GPU after v360, then encode
+        cmd += [
+            "-vf", f"{v360_filter},hwupload_cuda",
+            "-c:v", "hevc_nvenc",
+            "-cq", str(crf),       # same 0-51 range as CRF
+            "-preset", "p4",       # NVENC preset: p1(fast)..p7(slow), p4=balanced
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            output_path,
+        ]
+    else:
+        cmd += [
+            "-vf", v360_filter,
+            "-c:v", "libx265",
+            "-crf", str(crf),
+            "-preset", preset,
+            "-pix_fmt", pix_fmt,
+            "-c:a", "copy",
+            output_path,
+        ]
 
     return cmd
 
@@ -423,6 +440,7 @@ def process_file(
             preset=args.preset,
             pix_fmt=pix_fmt,
             overwrite=args.overwrite,
+            gpu=getattr(args, "gpu", False),
             ss=getattr(args, "ss", None),
             to=getattr(args, "to", None),
             duration=getattr(args, "duration", None),
@@ -533,6 +551,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--ffmpeg-path", metavar="PATH",
         help="Path to ffmpeg binary (also: FFMPEG_PATH env var)"
+    )
+    p.add_argument(
+        "--gpu", action="store_true",
+        help="Use NVIDIA NVENC (hevc_nvenc) for encoding — 5-10x faster than libx265"
     )
     p.add_argument(
         "--overwrite", action="store_true",

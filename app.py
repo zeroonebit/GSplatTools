@@ -50,7 +50,6 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 def _parse_ffmpeg_progress(line: str) -> float | None:
-    """Extract time= from FFmpeg output, return seconds or None."""
     import re
     m = re.search(r"time=(\d+):(\d+):([\d.]+)", line)
     if m:
@@ -58,20 +57,21 @@ def _parse_ffmpeg_progress(line: str) -> float | None:
     return None
 
 
-def run_command(cmd: list[str], log_container, duration_s: float = 0.0) -> int:
+def run_command(cmd: list[str], log_container, duration_s: float = 0.0,
+                stop_key: str = "") -> int:
     """
-    Run a subprocess and stream output into log_container.
-    If duration_s > 0, shows a progress bar based on FFmpeg time= output.
-    Returns exit code.
+    Run a subprocess, stream output into log_container.
+    stop_key: session_state key — if True mid-run, process is killed.
+    Returns exit code (or -1 if stopped by user).
     """
-    import os, re
+    import os
 
     if cmd[0] == sys.executable:
         cmd = [cmd[0], "-u"] + cmd[1:]
 
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
     log_lines: list[str] = []
-    log_box = log_container.code("starting…", language="")
+    log_box      = log_container.code("starting…", language="")
     progress_bar = log_container.progress(0) if duration_s > 0 else None
 
     try:
@@ -83,7 +83,19 @@ def run_command(cmd: list[str], log_container, duration_s: float = 0.0) -> int:
             bufsize=1,
             env=env,
         )
+        # Store pid so the Stop button can kill it
+        if stop_key:
+            st.session_state[f"{stop_key}_pid"] = proc.pid
+
         for line in proc.stdout:
+            # Check stop flag
+            if stop_key and st.session_state.get(f"{stop_key}_stop"):
+                proc.kill()
+                log_lines.append("— stopped by user —")
+                log_box.code("\n".join(log_lines[-150:]), language="")
+                st.session_state[f"{stop_key}_stop"] = False
+                return -1
+
             stripped = line.rstrip()
             if not stripped:
                 continue
@@ -93,6 +105,7 @@ def run_command(cmd: list[str], log_container, duration_s: float = 0.0) -> int:
                 t = _parse_ffmpeg_progress(stripped)
                 if t is not None:
                     progress_bar.progress(min(t / duration_s, 1.0))
+
         proc.wait()
         if progress_bar:
             progress_bar.progress(1.0)
@@ -188,11 +201,22 @@ with tab_eq:
         st.subheader("Options")
         eq_parallel = st.number_input("Parallel views", 1, 8, 1, key="eq_parallel",
                                       help="1 = sequential (safe for 8K)")
+        eq_gpu      = st.checkbox("GPU encode (NVENC) — RTX 4090 5-10x faster",
+                                  value=True, key="eq_gpu")
         eq_overwrite = st.checkbox("Overwrite existing", key="eq_overwrite")
         eq_dry_run   = st.checkbox("Dry-run", key="eq_dry_run")
 
     st.divider()
-    if st.button("▶  Run eq2persp", type="primary", use_container_width=True, key="eq_run"):
+    col_run, col_stop = st.columns([4, 1])
+    with col_run:
+        run_clicked = st.button("▶  Run eq2persp", type="primary",
+                                use_container_width=True, key="eq_run")
+    with col_stop:
+        if st.button("⏹  Stop", use_container_width=True, key="eq_stop_btn"):
+            st.session_state["eq_stop"] = True
+
+    if run_clicked:
+        st.session_state["eq_stop"] = False
         if not eq_input:
             st.warning("Enter a video file path.")
         else:
@@ -207,12 +231,12 @@ with tab_eq:
                 cmd += ["--views", str(eq_views)]
             if ffmpeg_path:
                 cmd += ["--ffmpeg-path", ffmpeg_path]
+            if eq_gpu:       cmd += ["--gpu"]
             if eq_overwrite: cmd += ["--overwrite"]
             if eq_dry_run:   cmd += ["--dry-run"]
 
             st.caption("`" + " ".join(cmd) + "`")
             log_area = st.empty()
-            # Probe duration for progress bar
             dur = 0.0
             try:
                 import json, subprocess as _sp
@@ -222,9 +246,13 @@ with tab_eq:
                 dur = float(json.loads(r.stdout).get("format", {}).get("duration", 0))
             except Exception:
                 pass
+            n_views = eq_views if eq_views else 4
             with st.spinner("Running eq2persp…"):
-                rc = run_command(cmd, log_area, duration_s=dur * eq_views if eq_views else dur * 4)
-            status_badge(rc)
+                rc = run_command(cmd, log_area, duration_s=dur * n_views, stop_key="eq")
+            if rc == -1:
+                st.warning("⏹ Stopped by user")
+            else:
+                status_badge(rc)
 
 
 # ============================================================
