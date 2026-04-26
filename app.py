@@ -51,9 +51,31 @@ with st.sidebar:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-def run_command(cmd: list[str], log_container) -> int:
+def _parse_ffmpeg_progress(line: str) -> float | None:
+    """Extract time= from FFmpeg output, return seconds or None."""
+    import re
+    m = re.search(r"time=(\d+):(\d+):([\d.]+)", line)
+    if m:
+        return int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3])
+    return None
+
+
+def run_command(cmd: list[str], log_container, duration_s: float = 0.0) -> int:
+    """
+    Run a subprocess and stream output into log_container.
+    If duration_s > 0, shows a progress bar based on FFmpeg time= output.
+    Returns exit code.
+    """
+    import os, re
+
+    if cmd[0] == sys.executable:
+        cmd = [cmd[0], "-u"] + cmd[1:]
+
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
     log_lines: list[str] = []
-    log_box = log_container.code("", language="")
+    log_box = log_container.code("starting…", language="")
+    progress_bar = log_container.progress(0) if duration_s > 0 else None
+
     try:
         proc = subprocess.Popen(
             cmd,
@@ -61,11 +83,21 @@ def run_command(cmd: list[str], log_container) -> int:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         )
         for line in proc.stdout:
-            log_lines.append(line.rstrip())
+            stripped = line.rstrip()
+            if not stripped:
+                continue
+            log_lines.append(stripped)
             log_box.code("\n".join(log_lines[-150:]), language="")
+            if progress_bar:
+                t = _parse_ffmpeg_progress(stripped)
+                if t is not None:
+                    progress_bar.progress(min(t / duration_s, 1.0))
         proc.wait()
+        if progress_bar:
+            progress_bar.progress(1.0)
         return proc.returncode
     except FileNotFoundError as e:
         log_container.error(f"Could not launch process: {e}")
@@ -181,7 +213,19 @@ with tab_eq:
             if eq_dry_run:   cmd += ["--dry-run"]
 
             st.caption("`" + " ".join(cmd) + "`")
-            rc = run_command(cmd, st.empty())
+            log_area = st.empty()
+            # Probe duration for progress bar
+            dur = 0.0
+            try:
+                import json, subprocess as _sp
+                ffprobe = (Path(ffmpeg_path).parent / "ffprobe.exe") if ffmpeg_path else Path("ffprobe")
+                r = _sp.run([str(ffprobe), "-v", "quiet", "-print_format", "json",
+                             "-show_format", eq_input], capture_output=True, text=True, timeout=10)
+                dur = float(json.loads(r.stdout).get("format", {}).get("duration", 0))
+            except Exception:
+                pass
+            with st.spinner("Running eq2persp…"):
+                rc = run_command(cmd, log_area, duration_s=dur * eq_views if eq_views else dur * 4)
             status_badge(rc)
 
 
@@ -243,8 +287,9 @@ with tab_sharp:
             if sf_verbose:   cmd += ["-v"]
 
             st.caption("`" + " ".join(cmd) + "`")
-            log_box = st.empty()
-            rc = run_command(cmd, log_box)
+            log_area = st.empty()
+            with st.spinner("Running sharp_frames…"):
+                rc = run_command(cmd, log_area)
             status_badge(rc)
 
             stem = Path(sf_input).stem
@@ -348,7 +393,9 @@ with tab_mask:
                 if mk_verbose:   cmd += ["-v"]
 
                 st.caption("`" + " ".join(cmd) + "`")
-                rc = run_command(cmd, st.empty())
+                log_area = st.empty()
+                with st.spinner("Running masks…"):
+                    rc = run_command(cmd, log_area)
                 status_badge(rc)
 
 
@@ -435,7 +482,9 @@ with tab_pipe:
             if pipe_verbose: cmd += ["-v"]
 
             st.caption("`" + " ".join(cmd) + "`")
-            rc = run_command(cmd, st.empty())
+            log_area = st.empty()
+            with st.spinner("Running pipeline…"):
+                rc = run_command(cmd, log_area)
             status_badge(rc)
 
 
