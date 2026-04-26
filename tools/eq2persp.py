@@ -143,6 +143,9 @@ def check_ffmpeg_version(ffmpeg: str) -> tuple[int, int, int]:
         raise RuntimeError(f"Failed to run ffmpeg at '{ffmpeg}': {e}") from e
 
     output = result.stdout + result.stderr
+    # Git/nightly builds report "ffmpeg version 2026-04-22-git-..." — treat as current
+    if re.search(r"ffmpeg version \d{4}-\d{2}-\d{2}-git", output):
+        return (99, 0, 0)
     match = re.search(r"ffmpeg version (\d+)\.(\d+)(?:\.(\d+))?", output)
     if not match:
         raise RuntimeError(f"Could not parse FFmpeg version from:\n{output[:300]}")
