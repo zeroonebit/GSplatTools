@@ -133,10 +133,11 @@ def path_input(key: str, label: str, placeholder: str = "", default: str = "") -
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab_eq, tab_sharp, tab_mask, tab_pipe, tab_about = st.tabs([
+tab_eq, tab_sharp, tab_mask, tab_colmap, tab_pipe, tab_about = st.tabs([
     "🎥  360 → Views",
     "🔍  Sharp Frames",
     "🎭  Masks",
+    "🗺️  COLMAP",
     "🚀  Pipeline",
     "ℹ️  About",
 ])
@@ -431,7 +432,122 @@ with tab_mask:
 
 
 # ============================================================
-# TAB 4 — Pipeline
+# TAB 4 — COLMAP
+# ============================================================
+with tab_colmap:
+    st.header("COLMAP Sparse Reconstruction")
+    st.caption(
+        "Combines all view frames into one dataset and runs COLMAP feature extraction, "
+        "matching, and mapping. Produces the sparse camera model that Lichtfeld needs."
+    )
+
+    col_l, col_r = st.columns(2, gap="large")
+
+    with col_l:
+        st.subheader("Input")
+        cl_input = path_input(
+            "cl_input", "Scene output base directory",
+            default=str(Path(st.session_state.get("output_dir",
+                             r"H:\Projects\GSplatTools\output")) / "<stem>"),
+            placeholder=r"output\scene",
+        )
+        st.caption(
+            "Point at the scene folder that eq2persp created — the one containing "
+            "`front/`, `right/`, etc.  "
+            "Frames from all views will be combined automatically."
+        )
+
+        st.subheader("COLMAP binary")
+        cl_colmap_path = path_input(
+            "cl_colmap_path", "COLMAP path",
+            placeholder=r"C:\COLMAP\colmap.exe  (auto-detected if on PATH)",
+        )
+
+        st.subheader("Matching strategy")
+        cl_matcher = st.radio(
+            "Matcher",
+            ["exhaustive", "sequential", "vocab_tree"],
+            index=0,
+            horizontal=True,
+            key="cl_matcher",
+            help=(
+                "**exhaustive** — tries all frame pairs, best quality "
+                "(recommended for <1000 frames).  \n"
+                "**sequential** — matches consecutive frames only, much faster "
+                "but works best for single-view sequences.  \n"
+                "**vocab_tree** — scalable for large sets (needs vocab tree file)."
+            ),
+        )
+
+    with col_r:
+        st.subheader("GPU")
+        cl_gpu = st.checkbox(
+            "GPU acceleration (CUDA) — RTX 4090",
+            value=True, key="cl_gpu",
+            help="Speeds up SIFT extraction and matching significantly.",
+        )
+
+        st.subheader("Options")
+        cl_overwrite = st.checkbox("Re-copy images/masks even if they exist",
+                                   key="cl_overwrite")
+        cl_dry_run   = st.checkbox("Dry-run", key="cl_dry_run")
+        cl_verbose   = st.checkbox("Verbose", key="cl_verbose")
+
+        st.subheader("Output")
+        st.markdown("""
+After a successful run you'll find:
+```
+<scene>/colmap/
+  images/       ← all frames, view-prefixed
+  masks/        ← masks (if generated)
+  database.db   ← COLMAP feature DB
+  sparse/0/
+    cameras.bin
+    images.bin
+    points3D.bin
+```
+Point Lichtfeld at `<scene>/colmap/` as the COLMAP directory.
+""")
+
+    st.divider()
+    col_run, col_stop = st.columns([4, 1])
+    with col_run:
+        cl_run_clicked = st.button("▶  Run COLMAP", type="primary",
+                                   use_container_width=True, key="cl_run")
+    with col_stop:
+        if st.button("⏹  Stop", use_container_width=True, key="cl_stop_btn"):
+            st.session_state["cl_stop"] = True
+
+    if cl_run_clicked:
+        st.session_state["cl_stop"] = False
+        if not cl_input:
+            st.warning("Enter the scene output directory.")
+        else:
+            cmd = [sys.executable, str(TOOLS_DIR / "colmap_recon.py"), cl_input,
+                   "--matcher", cl_matcher]
+            if cl_colmap_path:
+                cmd += ["--colmap-path", cl_colmap_path]
+            if not cl_gpu:
+                cmd += ["--no-gpu"]
+            if cl_overwrite:
+                cmd += ["--overwrite"]
+            if cl_dry_run:
+                cmd += ["--dry-run"]
+            if cl_verbose:
+                cmd += ["-v"]
+
+            st.caption("`" + " ".join(cmd) + "`")
+            log_area = st.empty()
+            with st.spinner("Running COLMAP…"):
+                rc = run_command(cmd, log_area, stop_key="cl")
+            if rc == -1:
+                st.warning("⏹ Stopped by user")
+            else:
+                status_badge(rc)
+
+
+# ============================================================
+# TAB 5 — Pipeline
 # ============================================================
 with tab_pipe:
     st.header("Full Pipeline")
@@ -544,6 +660,7 @@ Clean dataset  →  Lichtfeld  →  Gaussian Splat
 | `eq2persp` | ✅ Ready |
 | `sharp_frames` | ✅ Ready |
 | `masks` | ✅ Ready (needs `pip install ultralytics`) |
+| `colmap_recon` | ✅ Ready (needs COLMAP installed separately) |
 | `pipeline` | ✅ Ready |
 
 ### Setup
@@ -554,7 +671,10 @@ pip install streamlit opencv-python numpy tqdm pandas ultralytics
 # 2. Install FFmpeg >= 4.3
 # https://www.gyan.dev/ffmpeg/builds/
 
-# 3. Run
+# 3. Install COLMAP
+# https://github.com/colmap/colmap/releases
+
+# 4. Run
 streamlit run app.py
 ```
 
