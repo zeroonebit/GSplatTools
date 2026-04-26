@@ -1,13 +1,13 @@
 {
   "views": [
-    { "name": "orbit_000", "yaw":   0, "pitch": -15, "roll": 0 },
-    { "name": "orbit_045", "yaw":  45, "pitch": -15, "roll": 0 },
-    { "name": "orbit_090", "yaw":  90, "pitch": -15, "roll": 0 },
-    { "name": "orbit_135", "yaw": 135, "pitch": -15, "roll": 0 },
-    { "name": "orbit_180", "yaw": 180, "pitch": -15, "roll": 0 },
-    { "name": "orbit_225", "yaw": 225, "pitch": -15, "roll": 0 },
-    { "name": "orbit_270", "yaw": 270, "pitch": -15, "roll": 0 },
-    { "name": "orbit_315", "yaw": 315, "pitch": -15, "roll": 0 }
+    { "name": "orbit_000", "yaw":    0, "pitch": -15, "roll": 0 },
+    { "name": "orbit_045", "yaw":   45, "pitch": -15, "roll": 0 },
+    { "name": "orbit_090", "yaw":   90, "pitch": -15, "roll": 0 },
+    { "name": "orbit_135", "yaw":  135, "pitch": -15, "roll": 0 },
+    { "name": "orbit_180", "yaw":  180, "pitch": -15, "roll": 0 },
+    { "name": "orbit_225", "yaw": -135, "pitch": -15, "roll": 0 },
+    { "name": "orbit_270", "yaw":  -90, "pitch": -15, "roll": 0 },
+    { "name": "orbit_315", "yaw":  -45, "pitch": -15, "roll": 0 }
   ],
   "fov":    90,
   "width":  1920,

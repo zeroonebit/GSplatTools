@@ -71,7 +71,7 @@ DEFAULT_VIEWS_4: list[CameraView] = [
     CameraView("front",  yaw=0,   pitch=0),
     CameraView("right",  yaw=90,  pitch=0),
     CameraView("back",   yaw=180, pitch=0),
-    CameraView("left",   yaw=270, pitch=0),
+    CameraView("left",   yaw=-90, pitch=0),
 ]
 
 DEFAULT_VIEWS_6: list[CameraView] = DEFAULT_VIEWS_4 + [
