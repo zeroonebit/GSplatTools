@@ -333,25 +333,38 @@ def run_job(job: Job, dry_run: bool, log: logging.Logger) -> tuple[Job, int]:
     Path(job.output_path).parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             job.cmd,
-            capture_output=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
+            bufsize=1,
         )
+        stderr_lines: list[str] = []
+        for line in proc.stderr:
+            line = line.rstrip()
+            if not line:
+                continue
+            stderr_lines.append(line)
+            # Stream FFmpeg progress lines so the caller can see activity
+            if any(k in line for k in ("frame=", "fps=", "time=", "speed=", "Error", "error", "Invalid")):
+                log.info("[%s] %s", job.view.name, line)
+        proc.wait()
+        result_rc = proc.returncode
     except OSError as e:
         log.error("Failed to launch FFmpeg for view '%s': %s", job.view.name, e)
         return job, 1
 
-    if result.returncode != 0:
-        tail = "\n".join(result.stderr.splitlines()[-20:])
+    if result_rc != 0:
+        tail = "\n".join(stderr_lines[-20:])
         log.error(
             "FFmpeg failed (rc=%d) for view '%s' of '%s':\n%s",
-            result.returncode, job.view.name, job.input_path, tail
+            result_rc, job.view.name, job.input_path, tail
         )
     else:
         log.info("OK    %s", job.output_path)
 
-    return job, result.returncode
+    return job, result_rc
 
 
 def run_parallel(
