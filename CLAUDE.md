@@ -5,11 +5,17 @@ Converts raw 360° footage (DJI Osmo 360) into clean, analysis-ready image datas
 
 ## Project goal
 
-Gaussian Splatting (3DGS) requires undistorted, well-sampled images with known camera poses.
-Raw 360° footage is unsuitable directly. This toolset preprocesses footage into usable inputs:
+**Preprocessing only — no Gaussian Splatting training code lives here.**
+Training is handled by a separate tool (Lichtfeld). GSplatTools produces the clean dataset that Lichtfeld consumes.
+
+```
+eq2persp → sharp_frames → masks → [Lichtfeld for training]
+```
+
+Raw 360° footage is unsuitable for 3DGS directly. This toolset fixes that:
 1. Extract perspective views from equirectangular video
 2. Select only sharp, non-blurry frames
-3. Generate masks to exclude dynamic objects (people, drones) from the reconstruction
+3. Generate masks to exclude dynamic objects (people, drones)
 
 ## Architecture
 
