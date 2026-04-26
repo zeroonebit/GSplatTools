@@ -133,10 +133,11 @@ def path_input(key: str, label: str, placeholder: str = "", default: str = "") -
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab_eq, tab_sharp, tab_mask, tab_colmap, tab_pipe, tab_about = st.tabs([
+tab_eq, tab_sharp, tab_mask, tab_sam, tab_colmap, tab_pipe, tab_about = st.tabs([
     "🎥  360 → Views",
     "🔍  Sharp Frames",
     "🎭  Masks",
+    "🖱️  SAM Click",
     "🗺️  COLMAP",
     "🚀  Pipeline",
     "ℹ️  About",
@@ -307,8 +308,8 @@ with tab_sharp:
         if not sf_input:
             st.warning("Enter a video file path.")
         else:
+            # No -o: sharp_frames places frames/ adjacent to the clip (correct layout)
             cmd = [sys.executable, str(TOOLS_DIR / "sharp_frames.py"), sf_input,
-                   "-o", st.session_state["output_dir"],
                    "--every", str(int(sf_every))]
             if sf_mode.startswith("Top"):
                 cmd += ["--top", str(sf_top)]
@@ -324,8 +325,7 @@ with tab_sharp:
                 rc = run_command(cmd, log_area)
             status_badge(rc)
 
-            stem = Path(sf_input).stem
-            csv_path = Path(st.session_state["output_dir"]) / stem / "sharp_frames_scores.csv"
+            csv_path = Path(sf_input).parent / "sharp_frames_scores.csv"
             if csv_path.exists() and not sf_dry_run:
                 import pandas as pd
                 df = pd.read_csv(csv_path)
@@ -432,7 +432,189 @@ with tab_mask:
 
 
 # ============================================================
-# TAB 4 — COLMAP
+# TAB 4 — SAM Click
+# ============================================================
+with tab_sam:
+    st.header("SAM 2 Click Segmentation")
+    st.caption(
+        "Click on frames to mark objects as positive (mask) or negative (keep). "
+        "SAM 2 generates masks for all frames — either per-frame or by propagating "
+        "from a few keyframes through the whole sequence."
+    )
+
+    try:
+        from streamlit_image_coordinates import streamlit_image_coordinates as _img_coords
+        _sam_ui_ok = True
+    except ImportError:
+        st.warning(
+            "`streamlit-image-coordinates` not installed.  \n"
+            "Install with: `pip install streamlit-image-coordinates`"
+        )
+        _sam_ui_ok = False
+
+    if _sam_ui_ok:
+        col_l, col_r = st.columns([3, 2], gap="large")
+
+        with col_l:
+            st.subheader("Frames directory")
+            sam_frames_dir = path_input(
+                "sam_frames_dir", "Frames directory",
+                placeholder=r"output\scene\front\frames",
+            )
+
+            sam_frames: list = []
+            if sam_frames_dir and Path(sam_frames_dir).is_dir():
+                exts = {".png", ".jpg", ".jpeg"}
+                sam_frames = sorted(
+                    p for p in Path(sam_frames_dir).iterdir()
+                    if p.suffix.lower() in exts
+                )
+
+            if sam_frames:
+                st.caption(f"{len(sam_frames)} frames found")
+                frame_idx = st.slider(
+                    "Frame to annotate", 0, len(sam_frames) - 1, 0,
+                    key="sam_frame_idx",
+                )
+                frame_path = sam_frames[frame_idx]
+
+                # Render frame with accumulated click overlays
+                from PIL import Image, ImageDraw
+                import json as _json
+
+                annotations: list[dict] = st.session_state.get("sam_annotations", [])
+                frame_annots = next(
+                    (a["points"] for a in annotations if a["frame"] == frame_path.name),
+                    [],
+                )
+
+                img = Image.open(frame_path).convert("RGB")
+                orig_w, orig_h = img.size
+                display_w = 700
+                scale = display_w / orig_w
+                img_display = img.resize((display_w, int(orig_h * scale)))
+
+                if frame_annots:
+                    draw = ImageDraw.Draw(img_display)
+                    r = 8
+                    for pt in frame_annots:
+                        dx, dy = int(pt["x"] * scale), int(pt["y"] * scale)
+                        color = (0, 220, 80) if pt["label"] == 1 else (220, 40, 40)
+                        draw.ellipse([dx - r, dy - r, dx + r, dy + r],
+                                     fill=color, outline="white", width=2)
+
+                click_mode = st.radio(
+                    "Click mode",
+                    ["Positive (mask this)", "Negative (exclude)"],
+                    horizontal=True, key="sam_click_mode",
+                )
+                label_val = 1 if click_mode.startswith("Positive") else 0
+                st.caption("Click on the frame below to add a point.")
+
+                click = _img_coords(img_display, key=f"sam_click_{frame_idx}", width=display_w)
+                if click is not None:
+                    rx = int(click["x"] / scale)
+                    ry = int(click["y"] / scale)
+                    if "sam_annotations" not in st.session_state:
+                        st.session_state["sam_annotations"] = []
+                    annots = st.session_state["sam_annotations"]
+                    entry = next((a for a in annots if a["frame"] == frame_path.name), None)
+                    if entry is None:
+                        annots.append({"frame": frame_path.name, "points": []})
+                        entry = annots[-1]
+                    entry["points"].append({"x": rx, "y": ry, "label": label_val})
+                    st.rerun()
+
+            else:
+                st.info("Enter a valid frames directory to start annotating.")
+
+        with col_r:
+            st.subheader("Annotations")
+            annotations = st.session_state.get("sam_annotations", [])
+            total_pts = sum(len(a["points"]) for a in annotations)
+            st.caption(f"{len(annotations)} annotated frame(s) · {total_pts} point(s) total")
+
+            if annotations:
+                for ann in annotations:
+                    pos = sum(1 for p in ann["points"] if p["label"] == 1)
+                    neg = len(ann["points"]) - pos
+                    st.markdown(f"**{ann['frame']}** — {pos} ✅ {neg} ❌")
+
+                col_clr, col_save = st.columns(2)
+                with col_clr:
+                    if st.button("Clear all", key="sam_clear"):
+                        st.session_state["sam_annotations"] = []
+                        st.rerun()
+                with col_save:
+                    st.download_button(
+                        "Download prompts.json",
+                        data=_json.dumps(annotations, indent=2),
+                        file_name="prompts.json",
+                        mime="application/json",
+                        key="sam_dl",
+                    )
+
+            st.subheader("SAM 2 settings")
+            sam_mode = st.radio(
+                "Mode",
+                ["image — per-frame (fast)", "video — propagation (accurate)"],
+                key="sam_mode",
+                help=(
+                    "**image**: runs SAM 2 on each frame independently using the annotated "
+                    "frames as prompt templates applied to all frames.  \n"
+                    "**video**: SAM 2 video propagation — annotate a few keyframes and SAM "
+                    "tracks the objects through the whole sequence. Requires local checkpoint."
+                ),
+            )
+            sam_model = path_input(
+                "sam_model_path", "Model (HuggingFace ID or local .pt)",
+                default="facebook/sam2.1-hiera-small",
+            )
+            sam_no_gpu = st.checkbox("Force CPU", key="sam_no_gpu")
+            sam_dilate = st.slider("Mask dilation (px)", 0, 30, 5, key="sam_dilate")
+            sam_dry    = st.checkbox("Dry-run", key="sam_dry")
+
+            st.divider()
+
+            # Prompts JSON path — write to disk before running
+            sam_prompts_path = str(
+                Path(sam_frames_dir).parent / "sam_prompts.json"
+                if sam_frames_dir and Path(sam_frames_dir).is_dir()
+                else Path("sam_prompts.json")
+            )
+
+            if st.button("▶  Generate masks", type="primary",
+                         use_container_width=True, key="sam_run"):
+                cur_annotations = st.session_state.get("sam_annotations", [])
+                if not cur_annotations:
+                    st.warning("Add at least one annotation click first.")
+                elif not sam_frames_dir:
+                    st.warning("Enter a frames directory.")
+                else:
+                    import json as _j
+                    Path(sam_prompts_path).write_text(
+                        _j.dumps(cur_annotations, indent=2), encoding="utf-8"
+                    )
+                    mode_key = "video" if sam_mode.startswith("video") else "image"
+                    cmd = [
+                        sys.executable, str(TOOLS_DIR / "sam_segment.py"),
+                        sam_frames_dir,
+                        "--prompts", sam_prompts_path,
+                        "--mode", mode_key,
+                        "--model", sam_model,
+                        "--dilate", str(sam_dilate),
+                    ]
+                    if sam_no_gpu: cmd += ["--no-gpu"]
+                    if sam_dry:    cmd += ["--dry-run"]
+                    st.caption("`" + " ".join(cmd) + "`")
+                    log_area = st.empty()
+                    with st.spinner("Running SAM 2…"):
+                        rc = run_command(cmd, log_area)
+                    status_badge(rc)
+
+
+# ============================================================
+# TAB 5 — COLMAP
 # ============================================================
 with tab_colmap:
     st.header("COLMAP Sparse Reconstruction")
@@ -547,7 +729,7 @@ Point Lichtfeld at `<scene>/colmap/` as the COLMAP directory.
 
 
 # ============================================================
-# TAB 5 — Pipeline
+# TAB 6 — Pipeline
 # ============================================================
 with tab_pipe:
     st.header("Full Pipeline")
@@ -636,7 +818,7 @@ with tab_pipe:
 
 
 # ============================================================
-# TAB 5 — About
+# TAB 7 — About
 # ============================================================
 with tab_about:
     st.header("GSplatTools")
@@ -661,6 +843,7 @@ Clean dataset  →  Lichtfeld  →  Gaussian Splat
 | `sharp_frames` | ✅ Ready |
 | `masks` | ✅ Ready (needs `pip install ultralytics`) |
 | `colmap_recon` | ✅ Ready (needs COLMAP installed separately) |
+| `sam_segment` | ✅ Ready (needs SAM 2 + torch) |
 | `pipeline` | ✅ Ready |
 
 ### Setup

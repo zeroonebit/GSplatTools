@@ -190,8 +190,14 @@ def process_file(
     """Process one video file. Returns 0 on success, 1 on failure."""
     import cv2
 
-    stem = Path(input_path).stem
-    output_dir = Path(args.output_dir) / stem / "frames"
+    # If -o is given, treat it as the direct parent dir (frames go inside it).
+    # If omitted, put frames adjacent to the input clip — the natural location
+    # when clips are already in their view subdir (output/<stem>/<view>/).
+    if args.output_dir:
+        frames_base = Path(args.output_dir)
+    else:
+        frames_base = Path(input_path).parent
+    output_dir = frames_base / "frames"
 
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
@@ -237,7 +243,7 @@ def process_file(
 
     if not args.dry_run:
         selected_set = {idx for idx, _ in selected}
-        csv_path = Path(args.output_dir) / stem / "sharp_frames_scores.csv"
+        csv_path = frames_base / "sharp_frames_scores.csv"
         write_scores_csv(csv_path, scores, selected_set)
         log.info("Scores saved: %s", csv_path)
         log.info("Frames saved: %s", output_dir)
@@ -261,8 +267,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Input video file(s) or glob patterns",
     )
     p.add_argument(
-        "-o", "--output-dir", default="output", metavar="DIR",
-        help="Base output directory (default: ./output)",
+        "-o", "--output-dir", default=None, metavar="DIR",
+        help="Output parent directory. Frames go into <DIR>/frames/. "
+             "Defaults to the clip's own directory.",
     )
 
     sel = p.add_mutually_exclusive_group()

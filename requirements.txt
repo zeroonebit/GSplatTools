@@ -1,5 +1,6 @@
 # Web UI
 streamlit>=1.35.0
+streamlit-image-coordinates>=0.4.0
 pandas>=2.0.0
 
 # Core computer vision
@@ -11,21 +12,19 @@ Pillow>=10.0.0
 tqdm>=4.65.0
 
 # ---------------------------------------------------------------------------
-# Optional — mask generation
-# Install these when working on tools/masks.py
+# Optional — YOLO mask generation (tools/masks.py --method yolo)
 # ---------------------------------------------------------------------------
-
-# YOLOv8 object detection (drone, person, vehicle)
 # pip install ultralytics>=8.0.0
 
-# Meta Segment Anything Model (SAM) — precise pixel masks
+# ---------------------------------------------------------------------------
+# Optional — SAM 2 (tools/masks.py --method sam, tools/sam_segment.py)
+# PyTorch is the only heavy dependency in this project — required by SAM 2.
+# ---------------------------------------------------------------------------
 # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-# pip install git+https://github.com/facebookresearch/segment-anything.git
-
-# SAM 2 (faster, supports video)
 # pip install git+https://github.com/facebookresearch/sam2.git
 
 # ---------------------------------------------------------------------------
-# Optional — COLMAP / camera pose estimation integration
+# External binaries (not Python packages)
 # ---------------------------------------------------------------------------
-# pycolmap>=0.4.0
+# FFmpeg >= 4.3 with v360 filter:  https://www.gyan.dev/ffmpeg/builds/
+# COLMAP >= 3.8:                   https://github.com/colmap/colmap/releases

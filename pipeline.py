@@ -80,8 +80,19 @@ def run_step(name: str, cmd: list[str], dry_run: bool) -> int:
 # Per-file pipeline
 # ---------------------------------------------------------------------------
 
-VIEW_NAMES_4 = ["front", "right", "back", "left"]
-VIEW_NAMES_6 = VIEW_NAMES_4 + ["top", "bottom"]
+_DEFAULT_VIEWS_4 = ["front", "right", "back", "left"]
+_DEFAULT_VIEWS_6 = _DEFAULT_VIEWS_4 + ["top", "bottom"]
+
+
+def discover_views(output_base: Path, stem: str, fallback_views: list[str]) -> list[str]:
+    """Return view names by scanning for clips eq2persp created, or fall back to defaults."""
+    if not output_base.is_dir():
+        return fallback_views
+    found = [
+        d.name for d in sorted(output_base.iterdir())
+        if d.is_dir() and list(d.glob(f"{stem}_*.mp4"))
+    ]
+    return found if found else fallback_views
 
 
 def process_file(input_path: str, args: argparse.Namespace) -> int:
@@ -116,7 +127,8 @@ def process_file(input_path: str, args: argparse.Namespace) -> int:
     # ------------------------------------------------------------------
     # Step 2: sharp_frames — one run per view clip
     # ------------------------------------------------------------------
-    view_names = VIEW_NAMES_6 if args.views == 6 else VIEW_NAMES_4
+    fallback = _DEFAULT_VIEWS_6 if args.views == 6 else _DEFAULT_VIEWS_4
+    view_names = discover_views(output_base, stem, fallback)
 
     for view in view_names:
         clip = output_base / view / f"{stem}_{view}.mp4"
@@ -124,10 +136,10 @@ def process_file(input_path: str, args: argparse.Namespace) -> int:
             log.warning("Clip not found, skipping sharp_frames: %s", clip)
             continue
 
+        # No -o: sharp_frames defaults to clip's parent dir (output/<stem>/<view>/)
         cmd_sf = [
             sys.executable, str(TOOLS / "sharp_frames.py"),
             str(clip),
-            "-o", str(output_base / view),
         ]
         if args.top is not None:
             cmd_sf += ["--top", str(args.top)]
@@ -149,6 +161,8 @@ def process_file(input_path: str, args: argparse.Namespace) -> int:
     # Step 3: masks — one run per view's frames dir
     # ------------------------------------------------------------------
     if not args.skip_masks:
+        # Re-discover in case sharp_frames just created new frames dirs
+        view_names = discover_views(output_base, stem, fallback)
         for view in view_names:
             frames_dir = output_base / view / "frames"
             if not frames_dir.exists() and not args.dry_run:

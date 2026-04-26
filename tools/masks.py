@@ -139,7 +139,6 @@ def refine_with_sam(predictor, image_bgr, boxes_xyxy: list, dilate_px: int):
         return np.zeros((h, w), dtype=np.uint8)
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     predictor.set_image(image_rgb)
-    import numpy as np
     boxes_np = np.array(boxes_xyxy, dtype=np.float32)
     masks_out, _, _ = predictor.predict(box=boxes_np, multimask_output=False)
     combined = np.zeros((h, w), dtype=np.uint8)
