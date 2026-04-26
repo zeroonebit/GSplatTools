@@ -203,6 +203,10 @@ with tab_eq:
                                       help="1 = sequential (safe for 8K)")
         eq_gpu      = st.checkbox("GPU encode (NVENC) — RTX 4090 5-10x faster",
                                   value=True, key="eq_gpu")
+        eq_clean     = st.checkbox("Clean output before run (delete existing folder)",
+                                   key="eq_clean",
+                                   help="Removes output/<stem>/ entirely before starting, "
+                                        "so no partial files are reused.")
         eq_overwrite = st.checkbox("Overwrite existing", key="eq_overwrite")
         eq_dry_run   = st.checkbox("Dry-run", key="eq_dry_run")
 
@@ -232,6 +236,7 @@ with tab_eq:
             if ffmpeg_path:
                 cmd += ["--ffmpeg-path", ffmpeg_path]
             if eq_gpu:       cmd += ["--gpu"]
+            if eq_clean:     cmd += ["--clean"]
             if eq_overwrite: cmd += ["--overwrite"]
             if eq_dry_run:   cmd += ["--dry-run"]
 

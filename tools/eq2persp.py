@@ -418,6 +418,10 @@ def process_file(
     stem = Path(input_path).stem
     output_base = Path(args.output_dir) / stem
 
+    if getattr(args, "clean", False) and output_base.exists():
+        shutil.rmtree(output_base)
+        log.info("Cleaned output folder: %s", output_base)
+
     pix_fmt = probe_pixel_format(ffprobe, input_path)
     log.debug("Detected pix_fmt for '%s': %s", input_path, pix_fmt)
 
@@ -555,6 +559,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--gpu", action="store_true",
         help="Use NVIDIA NVENC (hevc_nvenc) for encoding — 5-10x faster than libx265"
+    )
+    p.add_argument(
+        "--clean", action="store_true",
+        help="Delete the output folder for each input file before processing (fresh restart)"
     )
     p.add_argument(
         "--overwrite", action="store_true",
