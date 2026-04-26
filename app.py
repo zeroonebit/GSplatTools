@@ -31,18 +31,16 @@ with st.sidebar:
     st.subheader("Global settings")
     ffmpeg_path = st.text_input(
         "FFmpeg path",
-        value=st.session_state.get("ffmpeg_path", ""),
-        placeholder="C:/ffmpeg/bin/ffmpeg.exe",
+        value=st.session_state.get("ffmpeg_path", r"C:\Users\thiag\ffmpeg-full_build\bin\ffmpeg.exe"),
         help="Leave blank to use system PATH.",
     )
     st.session_state["ffmpeg_path"] = ffmpeg_path
 
     output_dir = st.text_input(
         "Output base directory",
-        value=st.session_state.get("output_dir", "output"),
-        placeholder="output",
+        value=st.session_state.get("output_dir", r"H:\Projects\GSplatTools\output"),
     )
-    st.session_state["output_dir"] = output_dir or "output"
+    st.session_state["output_dir"] = output_dir or r"H:\Projects\GSplatTools\output"
 
     st.divider()
     st.caption(f"Python {sys.version.split()[0]}")
