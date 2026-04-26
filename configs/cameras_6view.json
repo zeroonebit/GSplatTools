@@ -1,0 +1,15 @@
+{
+  "views": [
+    { "name": "front",  "yaw":   0, "pitch":   0, "roll": 0 },
+    { "name": "right",  "yaw":  90, "pitch":   0, "roll": 0 },
+    { "name": "back",   "yaw": 180, "pitch":   0, "roll": 0 },
+    { "name": "left",   "yaw": 270, "pitch":   0, "roll": 0 },
+    { "name": "top",    "yaw":   0, "pitch":  90, "roll": 0 },
+    { "name": "bottom", "yaw":   0, "pitch": -90, "roll": 0 }
+  ],
+  "fov":    90,
+  "width":  1920,
+  "height": 1080,
+  "crf":    18,
+  "preset": "slow"
+}

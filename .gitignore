@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Output data (large video/image outputs — don't commit)
+output/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.exr
+
+# Model weights (large binary files)
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+models/
+
+# Logs
+*.log
+eq2persp.log
+sharp_frames.log
+masks.log
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
+*.tmp
+*.bak
+~$*
