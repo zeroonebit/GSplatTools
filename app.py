@@ -111,8 +111,8 @@ def status_badge(rc: int):
         st.error("❌ Failed — check log")
 
 
-def path_input(key: str, label: str, placeholder: str = "") -> str:
-    return st.text_input(label, value=st.session_state.get(key, ""),
+def path_input(key: str, label: str, placeholder: str = "", default: str = "") -> str:
+    return st.text_input(label, value=st.session_state.get(key, default),
                          placeholder=placeholder, key=key)
 
 
@@ -141,7 +141,7 @@ with tab_eq:
     with col_l:
         st.subheader("Input")
         eq_input = path_input("eq_input", "360° video file path",
-                              r"H:\footage\scene.mp4")
+                              default=r"H:\Projects\GSplatTools\test_vid\0426.mp4")
 
         st.subheader("Camera rig")
         eq_rig_mode = st.radio("Rig", ["Standard views", "Custom JSON config"],
