@@ -344,91 +344,177 @@ with tab_sharp:
 # ============================================================
 with tab_mask:
     st.header("Dynamic Object Masks")
-    st.caption(
-        "Generates binary masks (white = exclude) for people, drones, and other "
-        "dynamic objects using YOLOv8 detection. Optional SAM 2 for pixel-precise edges."
+
+    mask_mode = st.radio(
+        "Detection mode",
+        ["YOLO — class IDs (fast)", "Text prompt — YOLO-World (open vocabulary)"],
+        horizontal=True, key="mask_mode",
+        help="YOLO uses fixed COCO class IDs. Text prompt lets you type any description.",
     )
 
-    col_l, col_r = st.columns(2, gap="large")
-
-    with col_l:
-        st.subheader("Input")
-        mk_input = path_input("mk_input", "Frames directory",
-                              r"output\scene\front\frames")
-        st.caption("Point at the `frames/` folder from sharp_frames output.")
-
-        st.subheader("Classes to mask")
-        mk_person   = st.checkbox("person", value=True, key="mk_person")
-        mk_airplane = st.checkbox("airplane  (drone proxy)", value=False, key="mk_airplane")
-        mk_car      = st.checkbox("car", value=False, key="mk_car")
-        mk_custom   = st.text_input("Custom class names (space-separated)",
-                                    placeholder="motorcycle bicycle",
-                                    key="mk_custom")
-
-        st.subheader("Detection")
-        mk_confidence = st.slider("Confidence threshold", 0.1, 1.0, 0.4, step=0.05,
-                                  key="mk_confidence")
-        mk_dilate = st.slider("Mask dilation (px)", 0, 50, 15, key="mk_dilate",
-                              help="Expands masks outward to cover object edges.")
-
-    with col_r:
-        st.subheader("Method")
-        mk_method = st.radio(
-            "Segmentation method",
-            ["yolo — fast bbox fill", "sam — pixel-precise (needs SAM 2)"],
-            key="mk_method",
-            help="YOLO fills the bounding box. SAM 2 traces the exact object outline.",
-        )
-
-        st.subheader("Models")
-        mk_model = st.text_input("YOLO model path",
-                                 placeholder="yolov8n.pt  (auto-downloaded)",
-                                 key="mk_model")
-        sam_visible = mk_method.startswith("sam")
-        if sam_visible:
-            mk_sam_model = st.text_input("SAM 2 checkpoint path",
-                                         placeholder="sam2_hiera_small.pt",
-                                         key="mk_sam_model")
-            mk_device = st.selectbox("Device", ["auto", "cuda", "cpu", "mps"],
-                                     key="mk_device")
-        else:
-            mk_sam_model = ""
-            mk_device = "auto"
-
-        st.subheader("Options")
-        mk_dry_run = st.checkbox("Dry-run (count detections only)", key="mk_dry_run")
-        mk_verbose = st.checkbox("Verbose", key="mk_verbose")
-
     st.divider()
-    if st.button("▶  Run masks", type="primary", use_container_width=True, key="mk_run"):
-        if not mk_input:
-            st.warning("Enter a frames directory path.")
-        else:
-            classes = []
-            if mk_person:   classes.append("person")
-            if mk_airplane: classes.append("airplane")
-            if mk_car:      classes.append("car")
-            if mk_custom:   classes.extend(mk_custom.split())
-            if not classes:
-                st.warning("Select at least one class to mask.")
-            else:
-                method_key = "sam" if mk_method.startswith("sam") else "yolo"
-                cmd = [sys.executable, str(TOOLS_DIR / "masks.py"), mk_input,
-                       "--classes", *classes,
-                       "--method", method_key,
-                       "--confidence", str(mk_confidence),
-                       "--dilate", str(mk_dilate)]
-                if mk_model:     cmd += ["--model", mk_model]
-                if mk_sam_model: cmd += ["--sam-model", mk_sam_model]
-                if mk_device != "auto": cmd += ["--device", mk_device]
-                if mk_dry_run:   cmd += ["--dry-run"]
-                if mk_verbose:   cmd += ["-v"]
 
+    mk_input = path_input("mk_input", "Frames directory",
+                          placeholder=r"output\scene\front\frames")
+    st.caption("Point at the `frames/` folder from sharp_frames output.")
+
+    if mask_mode.startswith("YOLO"):
+        col_l, col_r = st.columns(2, gap="large")
+        with col_l:
+            st.subheader("Classes")
+            mk_person   = st.checkbox("person", value=True, key="mk_person")
+            mk_airplane = st.checkbox("airplane  (drone proxy)", value=False, key="mk_airplane")
+            mk_car      = st.checkbox("car", value=False, key="mk_car")
+            mk_custom   = st.text_input("Custom class names (space-separated)",
+                                        placeholder="motorcycle bicycle", key="mk_custom")
+            mk_confidence = st.slider("Confidence", 0.1, 1.0, 0.4, step=0.05, key="mk_confidence")
+            mk_dilate     = st.slider("Dilation (px)", 0, 50, 15, key="mk_dilate")
+
+        with col_r:
+            st.subheader("Method")
+            mk_method = st.radio(
+                "Segmentation",
+                ["yolo — fast bbox fill", "sam — pixel-precise (needs SAM 2)"],
+                key="mk_method",
+            )
+            mk_model = st.text_input("YOLO model", placeholder="yolov8n.pt  (auto-downloaded)",
+                                     key="mk_model")
+            if mk_method.startswith("sam"):
+                mk_sam_model = st.text_input("SAM 2 checkpoint",
+                                             placeholder="sam2_hiera_small.pt", key="mk_sam_model")
+                mk_device = st.selectbox("Device", ["auto", "cuda", "cpu"], key="mk_device")
+            else:
+                mk_sam_model, mk_device = "", "auto"
+            mk_dry_run = st.checkbox("Dry-run", key="mk_dry_run")
+            mk_verbose  = st.checkbox("Verbose", key="mk_verbose")
+
+        if st.button("▶  Run YOLO masks", type="primary", use_container_width=True, key="mk_run"):
+            if not mk_input:
+                st.warning("Enter a frames directory path.")
+            else:
+                classes = []
+                if mk_person:   classes.append("person")
+                if mk_airplane: classes.append("airplane")
+                if mk_car:      classes.append("car")
+                if mk_custom:   classes.extend(mk_custom.split())
+                if not classes:
+                    st.warning("Select at least one class.")
+                else:
+                    method_key = "sam" if mk_method.startswith("sam") else "yolo"
+                    cmd = [sys.executable, str(TOOLS_DIR / "masks.py"), mk_input,
+                           "--classes", *classes, "--method", method_key,
+                           "--confidence", str(mk_confidence), "--dilate", str(mk_dilate)]
+                    if mk_model:            cmd += ["--model", mk_model]
+                    if mk_sam_model:        cmd += ["--sam-model", mk_sam_model]
+                    if mk_device != "auto": cmd += ["--device", mk_device]
+                    if mk_dry_run:          cmd += ["--dry-run"]
+                    if mk_verbose:          cmd += ["-v"]
+                    st.caption("`" + " ".join(cmd) + "`")
+                    log_area = st.empty()
+                    with st.spinner("Running YOLO masks…"):
+                        rc = run_command(cmd, log_area)
+                    status_badge(rc)
+
+    else:
+        # Text-prompt mode (YOLO-World)
+        col_l, col_r = st.columns(2, gap="large")
+        with col_l:
+            st.subheader("Text prompts")
+            tm_text = st.text_input(
+                "Objects to mask (comma-separated)",
+                value="person, drone",
+                key="tm_text",
+                help="Type any description. Examples: person · drone · tripod · car · umbrella",
+            )
+            tm_confidence = st.slider("Confidence", 0.05, 1.0, 0.25, step=0.05, key="tm_confidence",
+                                      help="YOLO-World works best at lower confidence than YOLO.")
+            tm_dilate = st.slider("Dilation (px)", 0, 50, 10, key="tm_dilate")
+
+        with col_r:
+            st.subheader("Refinement")
+            tm_sam = st.checkbox("SAM 2 — pixel-precise edges (recommended)", value=True,
+                                 key="tm_sam")
+            tm_model = st.text_input("YOLO-World model",
+                                     placeholder="yolo11x-worldv2.pt  (auto-downloaded)",
+                                     key="tm_model")
+            if tm_sam:
+                tm_sam_model = st.text_input("SAM 2 checkpoint",
+                                             placeholder="facebook/sam2.1-hiera-small",
+                                             key="tm_sam_model")
+                tm_device = st.selectbox("Device", ["auto", "cuda", "cpu"], key="tm_device")
+            else:
+                tm_sam_model, tm_device = "", "auto"
+            tm_dry_run = st.checkbox("Dry-run", key="tm_dry_run")
+            tm_verbose  = st.checkbox("Verbose", key="tm_verbose")
+
+        if st.button("▶  Run text masks", type="primary", use_container_width=True, key="tm_run"):
+            if not mk_input:
+                st.warning("Enter a frames directory path.")
+            elif not tm_text.strip():
+                st.warning("Enter at least one text prompt.")
+            else:
+                cmd = [sys.executable, str(TOOLS_DIR / "text_masks.py"), mk_input,
+                       "--text", tm_text,
+                       "--confidence", str(tm_confidence),
+                       "--dilate", str(tm_dilate)]
+                if tm_model:            cmd += ["--model", tm_model]
+                if tm_sam:              cmd += ["--sam"]
+                if tm_sam_model:        cmd += ["--sam-model", tm_sam_model]
+                if tm_device != "auto": cmd += ["--device", tm_device]
+                if tm_dry_run:          cmd += ["--dry-run"]
+                if tm_verbose:          cmd += ["-v"]
                 st.caption("`" + " ".join(cmd) + "`")
                 log_area = st.empty()
-                with st.spinner("Running masks…"):
+                with st.spinner("Running text masks…"):
                     rc = run_command(cmd, log_area)
                 status_badge(rc)
+
+    # -------------------------------------------------------
+    # Combine Masks section
+    # -------------------------------------------------------
+    st.divider()
+    with st.expander("Combine mask layers", expanded=False):
+        st.caption(
+            "OR-combine multiple mask directories into one. "
+            "Stack AI masks, shape masks, SAM click masks, etc."
+        )
+        col_a, col_b = st.columns(2, gap="large")
+        with col_a:
+            cm_dirs = st.text_area(
+                "Mask directories (one per line)",
+                placeholder="output\\scene\\front\\masks_ai\noutput\\scene\\front\\masks_shape",
+                key="cm_dirs", height=100,
+            )
+            cm_output = st.text_input("Output directory",
+                                      placeholder="output\\scene\\front\\masks",
+                                      key="cm_output")
+        with col_b:
+            st.markdown("**Add shape layer**")
+            cm_shape = st.selectbox("Shape", ["none", "circle", "bottom", "top", "rect"],
+                                    key="cm_shape")
+            cm_frames = st.text_input("Frames dir (for shape size reference)",
+                                      placeholder=r"output\scene\front\frames",
+                                      key="cm_frames")
+            cm_strip_h = st.slider("Strip height (frac)", 0.05, 0.40, 0.15, step=0.01,
+                                   key="cm_strip_h",
+                                   help="Used for top/bottom strip shapes.")
+            cm_dry = st.checkbox("Dry-run", key="cm_dry")
+
+        if st.button("▶  Combine masks", type="primary",
+                     use_container_width=True, key="cm_run"):
+            dirs = [d.strip() for d in cm_dirs.splitlines() if d.strip()]
+            cmd = [sys.executable, str(TOOLS_DIR / "combine_masks.py")] + dirs
+            if cm_output:             cmd += ["-o", cm_output]
+            if cm_shape != "none":    cmd += ["--shape", cm_shape]
+            if cm_frames:             cmd += ["--frames", cm_frames]
+            if cm_shape in ("bottom", "top"):
+                cmd += ["--strip-height", str(cm_strip_h)]
+            if cm_dry:                cmd += ["--dry-run"]
+            st.caption("`" + " ".join(cmd) + "`")
+            log_area = st.empty()
+            with st.spinner("Combining masks…"):
+                rc = run_command(cmd, log_area)
+            status_badge(rc)
 
 
 # ============================================================
